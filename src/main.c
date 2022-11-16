@@ -16,6 +16,11 @@ Distributed under the terms of the GPL v3.0
 #include <pthread.h>
 #include <getopt.h>
 
+#ifdef __APPLE__
+#include <spawn.h>
+#endif
+
+
 // The syslog socket file, normally /dev/log
 #define SOCKET_FILE "/dev/log2"
 
@@ -123,6 +128,10 @@ int main (int argc, char **argv)
   BOOL show_version = FALSE;
   BOOL show_usage = FALSE;
   BOOL debug = FALSE;
+#ifdef __APPLE__
+  pid_t pid = 0;
+  char **environ;
+#endif
 
   // Parse the command line
 
@@ -207,7 +216,11 @@ int main (int argc, char **argv)
      exit(-1);
      }
 
-  struct sockaddr saddr = {AF_UNIX, SOCKET_FILE};
+  struct sockaddr saddr;
+  memset(&saddr, 0, sizeof(saddr));
+  saddr.sa_family = AF_UNIX;
+  strcpy(saddr.sa_data, SOCKET_FILE);
+
   socklen_t saddrlen = sizeof(struct sockaddr) + 6;
   if (bind (listen_fd, &saddr, saddrlen) < 0)
      {
@@ -232,7 +245,12 @@ int main (int argc, char **argv)
   // Put this program into the background, stifling stdout/stderr,
   //   unless we are in debug mode
   if (!debug)
+#ifdef __APPLE__
+    posix_spawn(&pid, argv[0], NULL, NULL, argv, environ);
+    waitpid(pid, NULL, 0);
+#else
     daemon (0, 0);
+#endif
 
   // Set up signals. The alarm signal will be used for timed dumps
   //  of the log messages to file. 
